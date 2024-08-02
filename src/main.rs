@@ -3,7 +3,7 @@ use std::io;
 use std::process;
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
-    if pattern.chars().count() == 1 {
+    if pattern.chars().count() > 0 {
         return input_line.contains(pattern);
     } else {
         panic!("Unhandled pattern: {}", pattern)
