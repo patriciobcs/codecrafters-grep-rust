@@ -4,7 +4,8 @@ use std::process;
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
     if pattern.chars().count() > 0 {
-        return input_line.contains(pattern);
+        let re = regex::Regex::new(pattern).unwrap();
+        re.is_match(input_line)
     } else {
         panic!("Unhandled pattern: {}", pattern)
     }
