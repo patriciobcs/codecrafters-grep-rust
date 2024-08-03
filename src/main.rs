@@ -109,6 +109,7 @@ fn main() {
     if match_pattern(&mut input_line, &mut pattern, false) {
         process::exit(0)
     } else {
+        println!("not match");
         process::exit(1)
     }
 }
