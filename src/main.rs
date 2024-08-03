@@ -11,6 +11,12 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
         return input_line.contains(|c: char| c.is_whitespace());
     } else if pattern == "\\w" {
         return input_line.contains(|c: char| c.is_alphanumeric());
+    } else if pattern.starts_with("[") && pattern.ends_with("]") {
+        let mut pattern_chars = pattern.chars();
+        pattern_chars.next();
+        pattern_chars.next_back();
+        let pattern_chars: Vec<char> = pattern_chars.collect();
+        return input_line.contains(|c: char| pattern_chars.contains(&c));
     } else {
         panic!("Unhandled pattern: {}", pattern)
     }
