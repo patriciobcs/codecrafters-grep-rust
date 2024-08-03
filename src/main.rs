@@ -15,8 +15,13 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
         let mut pattern_chars = pattern.chars();
         pattern_chars.next();
         pattern_chars.next_back();
-        let pattern_chars: Vec<char> = pattern_chars.collect();
-        return input_line.contains(|c: char| pattern_chars.contains(&c));
+        let mut pattern_chars: Vec<char> = pattern_chars.collect();
+        if pattern_chars.first() == Some(&'^') {
+            pattern_chars.remove(0);
+            return input_line.contains(|c: char| !pattern_chars.contains(&c));
+        } else {
+            return input_line.contains(|c: char| pattern_chars.contains(&c));
+        }
     } else {
         panic!("Unhandled pattern: {}", pattern)
     }
