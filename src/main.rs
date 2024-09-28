@@ -80,6 +80,36 @@ fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, must_match
 
             (conditions, i, is_negated)
         }
+        Some(&'(') => {
+            let mut i: usize = 1;
+            let mut current_pattern: Vec<char> = vec![];
+
+            while i < pattern.len() {
+                if pattern[i] == ')' ||pattern[i] == '|' {
+                    // println!("PATTERN {:?}", current_pattern);
+                    let mut input_line_clone = input_line.clone();
+                    let current_pattern_match = match_pattern(&mut input_line_clone, &mut current_pattern, false);
+                    println!("CURRENT PATTERN MATCH {:?}", input_line);
+
+                    if current_pattern_match {
+                        return true;
+                    } else {
+                        current_pattern.clear();
+                    }
+
+                    if pattern[i] == ')' {
+                        break;
+                    }
+                } else {
+                    println!("PATTERN {:?}", current_pattern);
+                    current_pattern.push(pattern[i]);
+                }
+                
+                i += 1;
+            }
+
+            return false;
+        }
         Some(x) => (
             vec![x.to_string()],
             0usize,
