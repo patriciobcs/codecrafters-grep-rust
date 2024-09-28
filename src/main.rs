@@ -2,31 +2,31 @@ use std::env;
 use std::io;
 use std::process;
 
-fn match_next(next_char: char, conditions: &Vec<&str>) -> bool {
+fn match_next(next_char: char, conditions: &Vec<String>) -> bool {
     let mut is_matching = false;
 
-        for condition in conditions {
-            match condition {
-                &"\\d" if next_char.is_digit(10) => {
-                        is_matching = true;
-                },
-                &"\\s" => {
-                    if next_char.is_whitespace() {
-                        is_matching = true;
-                    }
-                },
-                &"\\w" => {
-                    if next_char.is_alphanumeric() {
-                        is_matching = true;
-                    }
-                },
-                x => {
-                    if next_char.to_string() == *x {
-                        is_matching = true;
-                    }
+    for condition in conditions {
+        match condition.as_str() {
+            "\\d" if next_char.is_digit(10) => {
+                is_matching = true;
+            }
+            "\\s" => {
+                if next_char.is_whitespace() {
+                    is_matching = true;
+                }
+            }
+            "\\w" => {
+                if next_char.is_alphanumeric() {
+                    is_matching = true;
+                }
+            }
+            x => {
+                if next_char.to_string() == *x {
+                    is_matching = true;
                 }
             }
         }
+    }
 
     is_matching
 }
@@ -35,67 +35,115 @@ fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, must_match
     // If no more input line, it's not matching (pattern is not empty)
     if input_line.len() == 0 {
         if pattern.first() == Some(&'$') {
-            return true
+            return true;
         } else {
-            return false
+            return false;
         }
     }
 
-    let (is_matching, drain_ends) = match pattern.first() {
+    // Pattern start conditions
+    let (conditions, mut pattern_matched_last_index, is_negated) = match pattern.first() {
         Some(&'^') if !must_match => {
             return match_pattern(input_line, &mut pattern[1..].to_vec(), true)
-        },
+        }
         Some(&'\\') => {
-            (match_next(input_line[0], &vec![&pattern[0..=1].iter().collect::<String>()]), 1)
-        },
+            let conditions = vec![pattern[0..=1].iter().collect::<String>()];
+
+            (conditions, 1usize, false)
+        }
         Some(&'[') => {
             let mut conditions: Vec<String> = vec![];
-            let mut i = 0;
+            let mut i: usize = 0;
             let mut is_negated = false;
 
             while i < pattern.len() {
-                i+=1;
+                i += 1;
                 if pattern[i] == ']' {
                     break;
                 } else if pattern[i] == '^' {
                     is_negated = true;
+                    continue;
                 }
 
                 let condition = if pattern[i] == '\\' {
-                    i+=1;
-                    pattern[i-1..=i].iter().collect::<String>()
+                    i += 1;
+                    pattern[i - 1..=i].iter().collect::<String>()
                 } else {
                     pattern[i].to_string()
                 };
-                
+
                 conditions.push(condition);
             }
 
-            let conditions: Vec<&str> = conditions.iter().map(|x| x.as_str()).collect();
-            let is_matching = match_next(input_line[0], &conditions);
-
-            (is_negated != is_matching, i)
-        },
-        _ => {
-            (match_next(input_line[0], &vec![&pattern.first().unwrap().to_string()]), 0)
+            (conditions, i, is_negated)
+        }
+        Some(x) => (
+            vec![x.to_string()],
+            0usize,
+            false,
+        ),
+        None => {
+            return true;
         }
     };
-    
+
+
+    let (is_matching, input_line_matched_last_index) = {
+        let one_or_more = pattern.get(pattern_matched_last_index + 1).map(|x| x == &'+').unwrap_or(false);
+        
+        if one_or_more {
+            pattern_matched_last_index += 1;
+        }
+        
+        let mut matches = 0;
+        while let Some(next_char) = input_line.get(matches) {
+            if match_next(
+                *next_char,
+                &conditions,
+            ) {
+                // If negated and match, it's not a global matching
+                if is_negated {
+                    return false;
+                }
+
+                matches += 1;
+
+                if !one_or_more {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        (matches > 0, matches.saturating_sub(1))
+    };
+
+    // println!("{:?}", is_matching);
+    // println!("{:?}", input_line_matched_last_index);
+    // println!("{:?}", input_line);
+    // println!("{:?}\n", conditions);
+
     if is_matching {
         // Local match, remove matched pattern
-        pattern.drain(0..=drain_ends);
+        pattern.drain(0..=pattern_matched_last_index);
 
         // If no more pattern, it's a global match
         if pattern.len() == 0 {
-            return true
+            return true;
         }
     // This match was mandatory but it didn't happen
     } else if must_match {
-        return false
+        return false;
     }
-    
+
     // Remove first character from input line
-    input_line.remove(0);
+    input_line.drain(0..=input_line_matched_last_index);
+
+    // If negated and no more input line, it's a global match
+    if is_negated && input_line.len() == 0 {
+        return true;
+    }
 
     // Recursively call match_pattern with the rest of the input line
     match_pattern(input_line, pattern, must_match || is_matching)
