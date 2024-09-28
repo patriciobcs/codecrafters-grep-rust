@@ -34,7 +34,11 @@ fn match_next(next_char: char, conditions: &Vec<&str>) -> bool {
 fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, must_match: bool) -> bool {
     // If no more input line, it's not matching (pattern is not empty)
     if input_line.len() == 0 {
-        return false
+        if pattern.first() == Some(&'$') {
+            return true
+        } else {
+            return false
+        }
     }
 
     let (is_matching, drain_ends) = match pattern.first() {
@@ -46,9 +50,7 @@ fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, must_match
         },
         Some(&'[') => {
             let mut conditions: Vec<String> = vec![];
-
             let mut i = 0;
-            
             let mut is_negated = false;
 
             while i < pattern.len() {
@@ -70,7 +72,6 @@ fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, must_match
             }
 
             let conditions: Vec<&str> = conditions.iter().map(|x| x.as_str()).collect();
-
             let is_matching = match_next(input_line[0], &conditions);
 
             (is_negated != is_matching, i)
