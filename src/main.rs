@@ -38,8 +38,8 @@ fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, must_match
     }
 
     let (is_matching, drain_ends) = match pattern.first() {
-        Some(&'^') => {
-            (match_pattern(input_line, pattern, true), 0)
+        Some(&'^') if !must_match => {
+            return match_pattern(input_line, &mut pattern[1..].to_vec(), true)
         },
         Some(&'\\') => {
             (match_next(input_line[0], &vec![&pattern[0..=1].iter().collect::<String>()]), 1)
@@ -97,7 +97,7 @@ fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, must_match
     input_line.remove(0);
 
     // Recursively call match_pattern with the rest of the input line
-    match_pattern(input_line, pattern, is_matching)
+    match_pattern(input_line, pattern, must_match || is_matching)
 }
 
 // Usage: echo <input_text> | your_program.sh -E <pattern>
