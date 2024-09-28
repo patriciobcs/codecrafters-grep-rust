@@ -88,10 +88,11 @@ fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, must_match
     };
 
 
-    let (is_matching, input_line_matched_last_index) = {
+    let (is_matching, input_line_matched_last_index, skip) = {
         let one_or_more = pattern.get(pattern_matched_last_index + 1).map(|x| x == &'+').unwrap_or(false);
+        let zero_or_one = pattern.get(pattern_matched_last_index + 1).map(|x| x == &'?' ).unwrap_or(false);
         
-        if one_or_more {
+        if one_or_more || zero_or_one {
             pattern_matched_last_index += 1;
         }
         
@@ -108,7 +109,7 @@ fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, must_match
 
                 matches += 1;
 
-                if !one_or_more {
+                if zero_or_one || !one_or_more {
                     break;
                 }
             } else {
@@ -116,7 +117,7 @@ fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, must_match
             }
         }
 
-        (matches > 0, matches.saturating_sub(1))
+        (matches > 0, matches.saturating_sub(1), zero_or_one && matches == 0)
     };
 
     // println!("{:?}", is_matching);
@@ -124,7 +125,7 @@ fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, must_match
     // println!("{:?}", input_line);
     // println!("{:?}\n", conditions);
 
-    if is_matching {
+    if is_matching || skip {
         // Local match, remove matched pattern
         pattern.drain(0..=pattern_matched_last_index);
 
@@ -138,7 +139,9 @@ fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, must_match
     }
 
     // Remove first character from input line
-    input_line.drain(0..=input_line_matched_last_index);
+    if !skip {
+        input_line.drain(0..=input_line_matched_last_index);
+    }
 
     // If negated and no more input line, it's a global match
     if is_negated && input_line.len() == 0 {
