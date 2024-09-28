@@ -31,7 +31,12 @@ fn match_next(next_char: char, conditions: &Vec<&str>) -> bool {
     is_matching
 }
 
-fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, next: bool) -> bool {
+fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, must_match: bool) -> bool {
+    // If no more input line, it's not matching (pattern is not empty)
+    if input_line.len() == 0 {
+        return false
+    }
+
     let (is_matching, drain_ends) = match pattern.first() {
         Some(&'^') => {
             (match_pattern(input_line, pattern, true), 0)
@@ -43,10 +48,15 @@ fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, next: bool
             let mut conditions: Vec<String> = vec![];
 
             let mut i = 0;
+            
+            let mut is_negated = false;
+
             while i < pattern.len() {
                 i+=1;
                 if pattern[i] == ']' {
                     break;
+                } else if pattern[i] == '^' {
+                    is_negated = true;
                 }
 
                 let condition = if pattern[i] == '\\' {
@@ -61,35 +71,33 @@ fn match_pattern(input_line: &mut Vec<char>, pattern: &mut Vec<char>, next: bool
 
             let conditions: Vec<&str> = conditions.iter().map(|x| x.as_str()).collect();
 
+            let is_matching = match_next(input_line[0], &conditions);
 
-            (match_next(input_line[0], &conditions), i)
+            (is_negated != is_matching, i)
         },
         _ => {
             (match_next(input_line[0], &vec![&pattern.first().unwrap().to_string()]), 0)
         }
     };
-
+    
     if is_matching {
+        // Local match, remove matched pattern
         pattern.drain(0..=drain_ends);
-    }
 
-    if is_matching {
-        input_line.remove(0);
-        if input_line.len() == 0 || pattern.len() == 0 {
+        // If no more pattern, it's a global match
+        if pattern.len() == 0 {
             return true
         }
-        match_pattern(input_line, pattern, true)
-    } else {
-        if next {
-            false
-        } else {
-            input_line.remove(0);
-            if input_line.len() == 0 {
-                return true
-            }
-            match_pattern(input_line, pattern, false)
-        }
+    // This match was mandatory but it didn't happen
+    } else if must_match {
+        return false
     }
+    
+    // Remove first character from input line
+    input_line.remove(0);
+
+    // Recursively call match_pattern with the rest of the input line
+    match_pattern(input_line, pattern, is_matching)
 }
 
 // Usage: echo <input_text> | your_program.sh -E <pattern>
@@ -100,6 +108,7 @@ fn main() {
     }
 
     let mut pattern: Vec<char> = env::args().nth(2).unwrap().chars().collect();
+
     let mut input_line = String::new();
 
     io::stdin().read_line(&mut input_line).unwrap();
@@ -109,7 +118,6 @@ fn main() {
     if match_pattern(&mut input_line, &mut pattern, false) {
         process::exit(0)
     } else {
-        println!("not match");
         process::exit(1)
     }
 }
