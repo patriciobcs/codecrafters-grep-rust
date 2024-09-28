@@ -20,6 +20,9 @@ fn match_next(next_char: char, conditions: &Vec<String>) -> bool {
                     is_matching = true;
                 }
             }
+            "." => {
+                is_matching = true;
+            }
             x => {
                 if next_char.to_string() == *x {
                     is_matching = true;
