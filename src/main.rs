@@ -124,7 +124,7 @@ fn match_pattern(
                         let current_pattern_match = match_pattern(
                             &mut input_line_clone,
                             &mut current_pattern,
-                            false,
+                            must_match,
                             backreferences,
                         );
 
