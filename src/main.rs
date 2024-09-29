@@ -39,6 +39,7 @@ fn match_pattern(
     pattern: &mut Vec<char>,
     must_match: bool,
     backreferences: &mut Vec<Vec<char>>,
+    char_after_group: Option<&char>,
 ) -> bool {
     // If no more input line, it's not matching (pattern is not empty)
     if input_line.len() == 0 {
@@ -49,17 +50,19 @@ fn match_pattern(
         }
     }
 
+    let mut input_line_leftover = None;
+
     // Pattern start conditions
     let (conditions, mut pattern_matched_last_index, is_negated) = match pattern.first() {
         Some(&'^') if !must_match => {
-            return match_pattern(input_line, &mut pattern[1..].to_vec(), true, backreferences)
+            return match_pattern(input_line, &mut pattern[1..].to_vec(), true, backreferences, None)
         }
         Some(&'\\') => {
             if let Some(index) = pattern.get(1) {
                 if index.is_digit(10) {
                     let backreference_index = index.to_digit(10).unwrap() as usize;
                     if let Some(backreference) =
-                        backreferences.get(backreference_index.saturating_sub(1))
+                    backreferences.get(backreference_index.saturating_sub(1))
                     {
                         let pattern_leftover = if pattern.len() > 2 {
                             pattern[2..].to_vec()
@@ -75,6 +78,7 @@ fn match_pattern(
                             &mut updated_pattern.to_vec(),
                             true,
                             backreferences,
+                            char_after_group,
                         );
                     }
                 }
@@ -113,31 +117,48 @@ fn match_pattern(
         Some(&'(') => {
             let mut i: usize = 1;
             let mut current_pattern: Vec<char> = vec![];
-            let mut input_line_leftover = None;
             let mut matched_line = None;
+            let mut internal_parentheses_starts = 0;
+            let mut internal_parentheses_ends = 0;
 
             while i < pattern.len() {
-                if pattern[i] == ')' || pattern[i] == '|' {
-                    // println!("PATTERN {:?}", current_pattern);
+                if pattern[i] == '(' {
+                    internal_parentheses_starts += 1;
+                }
+                
+                if internal_parentheses_starts == internal_parentheses_ends && (pattern[i] == ')' || pattern[i] == '|') {
+                    if internal_parentheses_starts > 0 {
+                        backreferences.push(current_pattern.clone());
+                    }
+
                     if input_line_leftover.is_none() {
                         let mut input_line_clone = input_line.clone();
+
+                        let is_conditional = current_pattern.starts_with(&['[']);
+                        let char_after_group = if is_conditional {
+                            pattern.get(current_pattern.len() + 2)
+                        } else {
+                            None
+                        };
+
                         let current_pattern_match = match_pattern(
                             &mut input_line_clone,
                             &mut current_pattern,
                             must_match,
                             backreferences,
+                            char_after_group,
                         );
 
                         if current_pattern_match {
-
                             matched_line = Some(
                                 input_line[0..(input_line.len() - input_line_clone.len())].to_vec(),
                             );
-                            input_line_leftover = Some(input_line_clone);
+                            input_line_leftover = Some(input_line_clone.clone());
+
+                            input_line.clear();
+                            input_line.extend(input_line_clone);
                         }
                     }
-
-                    // println!("CURRENT PATTERN MATCH {:?}", input_line);
 
                     current_pattern.clear();
 
@@ -146,19 +167,29 @@ fn match_pattern(
                     }
                 } else {
                     current_pattern.push(pattern[i]);
+
+                    if pattern[i] == ')' {
+                        internal_parentheses_ends += 1;
+                    }
                 }
+
 
                 i += 1;
             }
-
+            
+            
             if let Some(line) = input_line_leftover.as_mut() {
                 let mut next_patterns = pattern[i + 1..].to_vec();
+                backreferences.push(matched_line.unwrap());
                 if next_patterns.len() > 0 {
-                    // println!("NEXT PATTERNS {:?}", next_patterns);
-                    // println!("MATCHED LINE {:?}", matched_line);
-                    // println!("LINE {:?}", line);
-                    backreferences.push(matched_line.unwrap());
-                    return match_pattern(line, &mut next_patterns, true, backreferences);
+                    let matched = match_pattern(line, &mut next_patterns, true, backreferences, char_after_group);
+
+                    if matched {
+                        input_line.clear();
+                        input_line.extend(line.iter());
+                    }
+
+                    return matched;
                 } else {
                     return true;
                 }
@@ -200,6 +231,12 @@ fn match_pattern(
                     continue;
                 }
             } else if is_negated {
+                if let Some(char_after_group) = char_after_group {
+                    if *char_after_group == *next_char {
+                        break;
+                    }
+                }
+
                 matches += 1;
 
                 if one_or_more {
@@ -218,16 +255,7 @@ fn match_pattern(
             zero_or_one && matches == 0,
         )
     };
-
-    // println!("IS MATCHING {:?}", is_matching);
-    // println!(
-    //     "INPUT LINE MATCHED LAST INDEX {:?}",
-    //     input_line_matched_last_index
-    // );
-    // println!("INPUT LINE {:?}", input_line);
-    // println!("IS_NEGATED {:?}", is_negated);
-    // println!("CONDITIONS {:?}\n", conditions);
-
+    
     if !skip {
         input_line.drain(0..=input_line_matched_last_index);
     }
@@ -256,6 +284,7 @@ fn match_pattern(
         pattern,
         must_match || is_matching,
         backreferences,
+        char_after_group,
     )
 }
 
@@ -274,7 +303,7 @@ fn main() {
 
     let mut input_line: Vec<char> = input_line.chars().collect();
 
-    if match_pattern(&mut input_line, &mut pattern, false, &mut vec![]) {
+    if match_pattern(&mut input_line, &mut pattern, false, &mut vec![], None) {
         process::exit(0)
     } else {
         process::exit(1)
