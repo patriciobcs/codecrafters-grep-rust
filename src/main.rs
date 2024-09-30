@@ -2,38 +2,25 @@ use std::env;
 use std::io;
 use std::process;
 
-fn match_next(next_char: char, conditions: &Vec<String>) -> bool {
-    let mut is_matching = false;
-
-    for condition in conditions {
-        match condition.as_str() {
-            "\\d" if next_char.is_digit(10) => {
-                is_matching = true;
-            }
-            "\\s" => {
-                if next_char.is_whitespace() {
-                    is_matching = true;
-                }
-            }
-            "\\w" => {
-                if next_char.is_alphanumeric() {
-                    is_matching = true;
-                }
-            }
-            "." => {
-                is_matching = true;
-            }
-            x => {
-                if next_char.to_string() == *x {
-                    is_matching = true;
-                }
-            }
-        }
-    }
-
-    is_matching
+/// Checks if a character matches any of the given conditions
+/// 
+/// This function is used to evaluate special character classes and literal characters
+/// in the regex pattern.
+fn match_next(next_char: char, conditions: &[String]) -> bool {
+    conditions.iter().any(|condition| match condition.as_str() {
+        "\\d" => next_char.is_digit(10),
+        "\\s" => next_char.is_whitespace(),
+        "\\w" => next_char.is_alphanumeric(),
+        "." => true,
+        x => next_char.to_string() == *x,
+    })
 }
 
+/// The main regex matching function
+/// 
+/// This recursive function implements the core logic for matching a regex pattern
+/// against an input string. It handles various regex features like anchors,
+/// character classes, groups, and quantifiers.
 fn match_pattern(
     input_line: &mut Vec<char>,
     pattern: &mut Vec<char>,
@@ -41,28 +28,32 @@ fn match_pattern(
     backreferences: &mut Vec<Vec<char>>,
     char_after_group: Option<&char>,
 ) -> bool {
-    // If no more input line, it's not matching (pattern is not empty)
-    if input_line.len() == 0 {
-        if pattern.first() == Some(&'$') {
-            return true;
-        } else {
-            return false;
-        }
+    // If the input is empty, only match if the pattern ends with '$'
+    if input_line.is_empty() {
+        return pattern.first() == Some(&'$');
     }
 
     let mut input_line_leftover = None;
 
-    // Pattern start conditions
+    // Handle different pattern start conditions
     let (conditions, mut pattern_matched_last_index, is_negated) = match pattern.first() {
+        // Handle start-of-line anchor '^'
         Some(&'^') if !must_match => {
-            return match_pattern(input_line, &mut pattern[1..].to_vec(), true, backreferences, None)
+            return match_pattern(
+                input_line,
+                &mut pattern[1..].to_vec(),
+                true,
+                backreferences,
+                None,
+            )
         }
+        // Handle escaped characters and backreferences
         Some(&'\\') => {
             if let Some(index) = pattern.get(1) {
                 if index.is_digit(10) {
                     let backreference_index = index.to_digit(10).unwrap() as usize;
                     if let Some(backreference) =
-                    backreferences.get(backreference_index.saturating_sub(1))
+                        backreferences.get(backreference_index.saturating_sub(1))
                     {
                         let pattern_leftover = if pattern.len() > 2 {
                             pattern[2..].to_vec()
@@ -88,6 +79,7 @@ fn match_pattern(
 
             (conditions, 1usize, false)
         }
+        // Handle character classes [...]
         Some(&'[') => {
             let mut conditions: Vec<String> = vec![];
             let mut i: usize = 0;
@@ -114,6 +106,7 @@ fn match_pattern(
 
             (conditions, i, is_negated)
         }
+        // Handle groups (...)
         Some(&'(') => {
             let mut i: usize = 1;
             let mut current_pattern: Vec<char> = vec![];
@@ -125,8 +118,10 @@ fn match_pattern(
                 if pattern[i] == '(' {
                     internal_parentheses_starts += 1;
                 }
-                
-                if internal_parentheses_starts == internal_parentheses_ends && (pattern[i] == ')' || pattern[i] == '|') {
+
+                if internal_parentheses_starts == internal_parentheses_ends
+                    && (pattern[i] == ')' || pattern[i] == '|')
+                {
                     if internal_parentheses_starts > 0 {
                         backreferences.push(current_pattern.clone());
                     }
@@ -173,16 +168,20 @@ fn match_pattern(
                     }
                 }
 
-
                 i += 1;
             }
-            
-            
+
             if let Some(line) = input_line_leftover.as_mut() {
                 let mut next_patterns = pattern[i + 1..].to_vec();
                 backreferences.push(matched_line.unwrap());
                 if next_patterns.len() > 0 {
-                    let matched = match_pattern(line, &mut next_patterns, true, backreferences, char_after_group);
+                    let matched = match_pattern(
+                        line,
+                        &mut next_patterns,
+                        true,
+                        backreferences,
+                        char_after_group,
+                    );
 
                     if matched {
                         input_line.clear();
@@ -197,13 +196,17 @@ fn match_pattern(
                 return false;
             }
         }
+        // Handle literal characters
         Some(x) => (vec![x.to_string()], 0usize, false),
+        // If pattern is empty, it's a match
         None => {
             return true;
         }
     };
 
+    // Handle quantifiers and perform character matching
     let (is_matching, input_line_matched_last_index, skip) = {
+        // Check for '+' and '?' quantifiers
         let one_or_more = pattern
             .get(pattern_matched_last_index + 1)
             .map(|x| x == &'+')
@@ -217,6 +220,7 @@ fn match_pattern(
             pattern_matched_last_index += 1;
         }
 
+        // Perform character matching
         let mut matches = 0;
         while let Some(next_char) = input_line.get(matches) {
             if match_next(*next_char, &conditions) {
@@ -247,38 +251,39 @@ fn match_pattern(
             break;
         }
 
-        // println!("MATCHES {:?}", matches);
-
+        // Return matching results
         (
             matches > 0,
             matches.saturating_sub(1),
             zero_or_one && matches == 0,
         )
     };
-    
+
+    // Remove matched characters from input, if a literal match happened
     if !skip {
         input_line.drain(0..=input_line_matched_last_index);
     }
 
+    // Handle successful matches and pattern updates
     if is_matching || skip {
-        // Local match, remove matched pattern
+        // Remove matched pattern
         pattern.drain(0..=pattern_matched_last_index);
 
-        // If no more pattern, it's a global match
+        // If no more pattern, it's a complete match
         if pattern.len() == 0 {
             return true;
         }
-    // This match was mandatory but it didn't happen
+    // This match was mandatory but didn't happen
     } else if must_match {
         return false;
     }
 
-    // If negated and no more input line, it's a global match
+    // Handle negated character classes at the end of input
     if is_negated && input_line.len() == 0 {
         return true;
     }
 
-    // Recursively call match_pattern with the rest of the input line
+    // Recursively continue matching
     match_pattern(
         input_line,
         pattern,
@@ -288,24 +293,46 @@ fn match_pattern(
     )
 }
 
-// Usage: echo <input_text> | your_program.sh -E <pattern>
+/// The main function that parses command-line arguments and runs the regex matcher
+///
+/// Usage: echo <input_text> | your_program -E <pattern>
 fn main() {
-    if env::args().nth(1).unwrap() != "-E" {
-        println!("Expected first argument to be '-E'");
+    let args: Vec<String> = env::args().collect();
+
+    // Ensure the first argument is '-E'
+    if args.get(1).map_or(true, |arg| arg != "-E") {
+        eprintln!("Expected first argument to be '-E'");
         process::exit(1);
     }
 
-    let mut pattern: Vec<char> = env::args().nth(2).unwrap().chars().collect();
+    // Get the regex pattern from command-line arguments
+    let pattern: Vec<char> = args
+        .get(2)
+        .expect("Pattern argument is required")
+        .chars()
+        .collect();
 
-    let mut input_line = String::new();
+    // Read input from stdin
+    let input_line: Vec<char> = io::stdin()
+        .lines()
+        .next()
+        .expect("Failed to read input")
+        .expect("Failed to parse input")
+        .chars()
+        .collect();
 
-    io::stdin().read_line(&mut input_line).unwrap();
-
-    let mut input_line: Vec<char> = input_line.chars().collect();
-
-    if match_pattern(&mut input_line, &mut pattern, false, &mut vec![], None) {
-        process::exit(0)
-    } else {
-        process::exit(1)
-    }
+    // Run the regex matcher and exit with appropriate status code
+    process::exit(
+        if match_pattern(
+            &mut input_line.clone(),
+            &mut pattern.clone(),
+            false,
+            &mut vec![],
+            None,
+        ) {
+            0 // Exit with 0 if there's a match
+        } else {
+            1 // Exit with 1 if there's no match
+        },
+    );
 }
